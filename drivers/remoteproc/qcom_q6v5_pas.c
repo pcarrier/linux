@@ -321,8 +321,8 @@ static int qcom_pas_start(struct rproc *rproc)
 
 	ret = qcom_scm_pas_auth_and_reset(pas->pas_id);
 	if (ret) {
-		dev_err(pas->dev,
-			"failed to authenticate image and release reset\n");
+		//dev_err(pas->dev,
+		//	"failed to authenticate image and release reset\n");
 		goto release_pas_metadata;
 	}
 

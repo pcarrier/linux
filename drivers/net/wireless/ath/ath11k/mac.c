@@ -7,6 +7,9 @@
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
 #include <linux/etherdevice.h>
+#include <linux/ctype.h>
+#include <linux/string.h>
+#include <linux/kstrtox.h>
 #include <linux/bitfield.h>
 #include <linux/inetdevice.h>
 #include <net/if_inet6.h>
@@ -225,6 +228,82 @@ ath11k_phymodes[NUM_NL80211_BANDS][ATH11K_CHAN_WIDTH_NUM] = {
 	},
 
 };
+
+extern const char *qcom_serial_number;
+
+struct macaddr_t {
+	u8 b[ETH_ALEN];
+};
+
+static const struct macaddr_t static_macaddr = {
+	.b = { 0x00, 0x03, 0x7F, 0x11, 0x22, 0x33 }
+};
+
+static int generate_macaddr_from_serial(struct ath11k *ar,
+					struct macaddr_t *macaddr)
+{
+	const char *serial = qcom_serial_number;
+	size_t serial_len;
+	char last6[7] = { 0 };
+	int i;
+	int ret;
+
+	if (!serial) {
+		ath11k_err(ar->ab, "qcom_serial_number is NULL");
+		return -EINVAL;
+	}
+
+	serial_len = strlen(serial);
+	if (serial_len < 6) {
+		ath11k_err(ar->ab,
+			   "qcom_serial_number is too short: %zu characters",
+			   serial_len);
+		return -EINVAL;
+	}
+
+	strscpy(last6, serial + serial_len - 6, sizeof(last6));
+
+	macaddr->b[5] = 0x00;
+	macaddr->b[4] = 0x03;
+	macaddr->b[3] = 0x7F;
+
+	for (i = 0; i < 3; i++) {
+		char byte_str[3] = { 0 };
+		u8 byte_val;
+
+		byte_str[0] = last6[i * 2];
+		byte_str[1] = last6[i * 2 + 1];
+
+		if (!isxdigit(byte_str[0]) || !isxdigit(byte_str[1])) {
+			ath11k_err(ar->ab,
+				   "Invalid hex characters in serial number: %c%c",
+				   byte_str[0], byte_str[1]);
+			return -EINVAL;
+		}
+
+		ret = kstrtou8(byte_str, 16, &byte_val);
+		if (ret < 0) {
+			ath11k_err(ar->ab,
+				   "Failed to convert hex string to u8: %c%c",
+				   byte_str[0], byte_str[1]);
+			return ret;
+		}
+
+		macaddr->b[2 - i] = byte_val;
+	}
+
+	ath11k_info(ar->ab, "Generated MAC_ADDR: %pMR", macaddr);
+
+	return 0;
+}
+
+static void ath11k_reverse_mac(u8 *dst, const u8 *src)
+{
+	int i;
+
+	for (i = 0; i < ETH_ALEN; i++)
+		dst[i] = src[ETH_ALEN - 1 - i];
+}
 
 const struct htt_rx_ring_tlv_filter ath11k_mac_mon_status_filter_default = {
 	.rx_filter = HTT_RX_FILTER_TLV_FLAGS_MPDU_START |
@@ -10530,16 +10609,26 @@ int ath11k_mac_register(struct ath11k_base *ab)
 	device_get_mac_address(ab->dev, mac_addr);
 
 	for (i = 0; i < ab->num_radios; i++) {
+		struct macaddr_t generated_macaddr = static_macaddr;
+
 		pdev = &ab->pdevs[i];
 		ar = pdev->ar;
-		if (ab->pdevs_macaddr_valid) {
-			ether_addr_copy(ar->mac_addr, pdev->mac_addr);
+
+		ret = generate_macaddr_from_serial(ar, &generated_macaddr);
+		if (ret) {
+			ath11k_err(ab, "Failed to generate MAC_ADDR from serial number, falling back");
+			if (ab->pdevs_macaddr_valid) {
+				ether_addr_copy(ar->mac_addr, pdev->mac_addr);
+			} else {
+				if (is_zero_ether_addr(mac_addr))
+					ether_addr_copy(ar->mac_addr, ab->mac_addr);
+				else
+					ether_addr_copy(ar->mac_addr, mac_addr);
+				ar->mac_addr[4] += i;
+			}
 		} else {
-			if (is_zero_ether_addr(mac_addr))
-				ether_addr_copy(ar->mac_addr, ab->mac_addr);
-			else
-				ether_addr_copy(ar->mac_addr, mac_addr);
-			ar->mac_addr[4] += i;
+			ath11k_reverse_mac(ar->mac_addr, generated_macaddr.b);
+			ath11k_info(ab, "MAC_ADDR set to %pMR", generated_macaddr.b);
 		}
 
 		idr_init(&ar->txmgmt_idr);

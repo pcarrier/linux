@@ -67,7 +67,10 @@ static int sm8250_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = 2;
-	snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S16_LE);
+
+	/* Only force S16_LE for compressed playback */
+	if (rtd->dai_link->compr_ops)
+		snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S16_LE);
 
 	return 0;
 }
