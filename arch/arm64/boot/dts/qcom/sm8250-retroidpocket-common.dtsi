@@ -1211,6 +1211,21 @@
 		};
 	};
 
+	displayport-rx-dai-link {
+		link-name = "DisplayPort Playback";
+
+        	codec {
+            		sound-dai = <&mdss_dp>;
+        	};
+
+		cpu {
+			sound-dai = <&q6afedai DISPLAY_PORT_RX>;
+		};
+		platform {
+			sound-dai = <&q6routing>;
+		};
+	};
+
 	wcd-playback-dai-link {
 		link-name = "WCD Playback";
 		cpu {
