@@ -655,8 +655,8 @@ static int32_t q6asm_stream_callback(struct apr_device *adev,
 			}
 			break;
 		default:
-			dev_err(ac->dev, "command[0x%x] not expecting rsp\n",
-				result->opcode);
+			//dev_err(ac->dev, "command[0x%x] not expecting rsp\n",
+			//	result->opcode);
 			break;
 		}
 
@@ -782,8 +782,8 @@ static int q6asm_srvc_callback(struct apr_device *adev,
 			wake_up(&a->mem_wait);
 			break;
 		default:
-			dev_err(&adev->dev, "command[0x%x] not expecting rsp\n",
-				 result->opcode);
+			//dev_err(&adev->dev, "command[0x%x] not expecting rsp\n",
+			//	 result->opcode);
 			break;
 		}
 		goto done;
